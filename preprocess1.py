@@ -2,48 +2,33 @@
 import argparse
 import torch
 import transformer.Constants as Constants
-from util import generate_mistake
-from util import getvocab
 from sklearn.model_selection import train_test_split
-def read_instances_from_file(inst_file, max_sent_len, keep_case, vocab):
+def read_instances_from_file(inst_file, max_sent_len, keep_case):
     ''' Convert file into word seq lists and vocab '''
 
-    # word_insts = []
-    train_word_insts = []
-    target_word_insts = []
+    word_insts = []
     trimmed_sent_count = 0
     with open(inst_file) as f:
         for sent in f:
             if not keep_case:
                 sent = sent.lower()
-            # words = sent.split()
-            sent = sent.replace('\n', '')
-            sent = sent.replace('\t', '')
-            words = list(sent)
+            words = sent.split()
             if len(words) > max_sent_len:
                 trimmed_sent_count += 1
             word_inst = words[:max_sent_len]
+
             if word_inst:
-                # word_insts += [[Constants.BOS_WORD] + word_inst + [Constants.EOS_WORD]]
-                train_word_insts += [[Constants.BOS_WORD] + word_inst + [Constants.EOS_WORD]]
-                target_word_insts += [[Constants.BOS_WORD] + word_inst + [Constants.EOS_WORD]]
+                word_insts += [[Constants.BOS_WORD] + word_inst + [Constants.EOS_WORD]]
+            else:
+                word_insts += [None]
 
-                aug_word = generate_mistake.generate_mistakes(words, vocab)
-                aug_word_inst = aug_word[:max_sent_len] 
-                train_word_insts += [[Constants.BOS_WORD] + aug_word_inst + [Constants.EOS_WORD]]
-                target_word_insts += [[Constants.BOS_WORD] + word_inst + [Constants.EOS_WORD]]
-            # else:
-            #     word_insts += [None]
-            #     # train_word_insts += [None]
-            #     # target_word_insts += [None]
-
-    print('[Info] Get {} instances from {}'.format(len(train_word_insts), inst_file))
+    print('[Info] Get {} instances from {}'.format(len(word_insts), inst_file))
 
     if trimmed_sent_count > 0:
         print('[Warning] {} instances are trimmed to the max sentence length {}.'
               .format(trimmed_sent_count, max_sent_len))
 
-    return train_word_insts, target_word_insts
+    return word_insts, word_insts
 
 def build_vocab_idx(word_insts, min_word_count):
     ''' Trim vocab by number of occurence '''
@@ -85,24 +70,21 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-train_src', required=True)
-    # parser.add_argument('-train_tgt', required=True)
-    # parser.add_argument('-valid_src', required=True)
-    # parser.add_argument('-valid_tgt', required=True)
+    parser.add_argument('-train_tgt', required=True)
+    parser.add_argument('-valid_src', required=True)
+    parser.add_argument('-valid_tgt', required=True)
     parser.add_argument('-save_data', required=True)
     parser.add_argument('-max_len', '--max_word_seq_len', type=int, default=50)
     parser.add_argument('-min_word_count', type=int, default=5)
     parser.add_argument('-keep_case', action='store_true')
-
     parser.add_argument('-share_vocab', action='store_true')
     parser.add_argument('-vocab', default=None)
 
     opt = parser.parse_args()
     opt.max_token_seq_len = opt.max_word_seq_len + 2 # include the <s> and </s>
-
-    full_vocab = getvocab.getvocab(opt.train_src)
     # Training set
     train_src_word_insts, train_tgt_word_insts = read_instances_from_file(
-        opt.train_src, opt.max_word_seq_len, opt.keep_case, full_vocab)
+        opt.train_src, opt.max_word_seq_len, opt.keep_case)
     # train_tgt_word_insts = read_instances_from_file(
     #     opt.train_tgt, opt.max_word_seq_len, opt.keep_case)
 
