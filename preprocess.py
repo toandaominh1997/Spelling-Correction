@@ -5,7 +5,7 @@ import transformer.Constants as Constants
 from util import generate_mistake
 from util import getvocab
 from sklearn.model_selection import train_test_split
-def read_instances_from_file(inst_file, max_sent_len, keep_case, vocab):
+def read_instances_from_file(inst_file, max_sent_len, keep_case, vocab=None):
     ''' Convert file into word seq lists and vocab '''
 
     # word_insts = []
