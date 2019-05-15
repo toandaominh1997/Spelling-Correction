@@ -38,7 +38,7 @@ def main():
     # Prepare DataLoader
     preprocess_data = torch.load(opt.vocab)
     preprocess_settings = preprocess_data['settings']
-    test_src_word_insts = read_instances_from_file(
+    test_src_word_insts, _ = read_instances_from_file(
         opt.src,
         preprocess_settings.max_word_seq_len,
         preprocess_settings.keep_case)
