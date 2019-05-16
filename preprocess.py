@@ -4,6 +4,8 @@ import torch
 import transformer.Constants as Constants
 from util import generate_mistake
 from util import getvocab
+import glob
+
 from sklearn.model_selection import train_test_split
 def read_instances_from_file(inst_file, max_sent_len, keep_case, vocab=None):
     ''' Convert file into word seq lists and vocab '''
@@ -12,12 +14,12 @@ def read_instances_from_file(inst_file, max_sent_len, keep_case, vocab=None):
     train_word_insts = []
     target_word_insts = []
     trimmed_sent_count = 0
-    with open(inst_file) as f:
+    with open(inst_file, encoding='latin-1') as f:
         for sent in f:
             if not keep_case:
                 sent = sent.lower()
             # words = sent.split()
-            sent = sent.replace('\n', '')
+            sent = sent.replace('\n', '').replace('\\', '')
             sent = sent.replace('\t', '')
             words = list(sent)
             if len(words) > max_sent_len:
@@ -27,11 +29,11 @@ def read_instances_from_file(inst_file, max_sent_len, keep_case, vocab=None):
                 # word_insts += [[Constants.BOS_WORD] + word_inst + [Constants.EOS_WORD]]
                 train_word_insts += [[Constants.BOS_WORD] + word_inst + [Constants.EOS_WORD]]
                 target_word_insts += [[Constants.BOS_WORD] + word_inst + [Constants.EOS_WORD]]
-
-                aug_word = generate_mistake.generate_mistakes(words, vocab)
-                aug_word_inst = aug_word[:max_sent_len] 
-                train_word_insts += [[Constants.BOS_WORD] + aug_word_inst + [Constants.EOS_WORD]]
-                target_word_insts += [[Constants.BOS_WORD] + word_inst + [Constants.EOS_WORD]]
+                if(vocab!=None):
+                    aug_word = generate_mistake.generate_mistakes(words, vocab)
+                    aug_word_inst = aug_word[:max_sent_len] 
+                    train_word_insts += [[Constants.BOS_WORD] + aug_word_inst + [Constants.EOS_WORD]]
+                    target_word_insts += [[Constants.BOS_WORD] + word_inst + [Constants.EOS_WORD]]
             # else:
             #     word_insts += [None]
             #     # train_word_insts += [None]
@@ -89,7 +91,7 @@ def main():
     # parser.add_argument('-valid_src', required=True)
     # parser.add_argument('-valid_tgt', required=True)
     parser.add_argument('-save_data', required=True)
-    parser.add_argument('-max_len', '--max_word_seq_len', type=int, default=50)
+    parser.add_argument('-max_len', '--max_word_seq_len', type=int, default=100)
     parser.add_argument('-min_word_count', type=int, default=5)
     parser.add_argument('-keep_case', action='store_true')
 
@@ -99,10 +101,22 @@ def main():
     opt = parser.parse_args()
     opt.max_token_seq_len = opt.max_word_seq_len + 2 # include the <s> and </s>
 
-    full_vocab = getvocab.getvocab(opt.train_src)
+    # full_vocab = getvocab.getvocab(opt.train_src)
+    train_src_word_insts = []
+    train_tgt_word_insts = []
+    full_vocab = ''
+    for filename in glob.glob('{}/*.*'.format(opt.train_src)):
+        print(filename)
+        full_vocab +=  getvocab.getvocab(filename).replace('\n', '').replace('\t', '').replace('\ufeff', '')
+    full_vocab = ''.join(sorted(set(full_vocab)))
     # Training set
-    train_src_word_insts, train_tgt_word_insts = read_instances_from_file(
-        opt.train_src, opt.max_word_seq_len, opt.keep_case, full_vocab)
+    train_src_word_insts = []
+    train_tgt_word_insts = []
+    for filename in glob.glob('{}/*.*'.format(opt.train_src)):
+        src_word_insts, tgt_word_insts = read_instances_from_file(filename, opt.max_word_seq_len, opt.keep_case, full_vocab)
+        train_src_word_insts +=src_word_insts
+        train_tgt_word_insts +=tgt_word_insts
+    
     # train_tgt_word_insts = read_instances_from_file(
     #     opt.train_tgt, opt.max_word_seq_len, opt.keep_case)
 
@@ -161,8 +175,7 @@ def main():
     print('[Info] Convert target word instances into sequences of word index.')
     train_tgt_insts = convert_instance_to_idx_seq(train_tgt_word_insts, tgt_word2idx)
     valid_tgt_insts = convert_instance_to_idx_seq(valid_tgt_word_insts, tgt_word2idx)
-    print('src_word2idx: ', type(src_word2idx))
-    print('train_src_insts: ', type(train_src_insts))
+
     data = {
         'settings': opt,
         'dict': {

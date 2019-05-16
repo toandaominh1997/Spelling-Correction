@@ -9,6 +9,12 @@ def generate_mistakes(name, vocab):
 
     used = []
     num_words = len(name)
+    diff = 0
+    for i in name:
+        if(i!=' '):
+            diff+=1
+    if(diff<4):
+        return name
     name = list(name)
     name_copy = name[:]
     num_mists = np.random.choice([1,2,3], p=[0.4, 0.3, 0.3])

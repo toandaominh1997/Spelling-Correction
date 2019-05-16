@@ -33,7 +33,7 @@ def main():
     parser.add_argument('-no_cuda', action='store_true')
 
     opt = parser.parse_args()
-    opt.cuda = not opt.no_cuda
+    opt.cuda = True
 
     # Prepare DataLoader
     preprocess_data = torch.load(opt.vocab)
@@ -61,7 +61,7 @@ def main():
             all_hyp, all_scores = translator.translate_batch(*batch)
             for idx_seqs in all_hyp:
                 for idx_seq in idx_seqs:
-                    pred_line = ' '.join([test_loader.dataset.tgt_idx2word[idx] for idx in idx_seq])
+                    pred_line = ''.join([test_loader.dataset.tgt_idx2word[idx] for idx in idx_seq])
                     f.write(pred_line + '\n')
     print('[Info] Finished.')
 
