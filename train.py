@@ -198,7 +198,7 @@ def main():
     parser.add_argument('-epoch', type=int, default=500)
     parser.add_argument('-batch_size', type=int, default=64)
 
-    #parser.add_argument('-d_word_vec', type=int, default=512)
+    # parser.add_argument('-d_word_vec', type=int, default=512)
     parser.add_argument('-d_model', type=int, default=512)
     parser.add_argument('-d_inner_hid', type=int, default=2048)
     parser.add_argument('-d_k', type=int, default=64)
@@ -212,6 +212,7 @@ def main():
     parser.add_argument('-embs_share_weight', action='store_true')
     parser.add_argument('-proj_share_weight', action='store_true')
 
+    parser.add_argument('-model', default=None, help='Path to model file')
     parser.add_argument('-log', default=None)
     parser.add_argument('-save_model', default=None)
     parser.add_argument('-save_mode', type=str, choices=['all', 'best'], default='best')
@@ -260,6 +261,26 @@ def main():
             filter(lambda x: x.requires_grad, transformer.parameters()),
             betas=(0.9, 0.98), eps=1e-09),
         opt.d_model, opt.n_warmup_steps)
+    if(opt.model is not None):
+        print('pretrain model!')
+        checkpoint = torch.load(opt.model)
+        model_opt = checkpoint['settings']
+        transformer = Transformer(
+            model_opt.src_vocab_size,
+            model_opt.tgt_vocab_size,
+            model_opt.max_token_seq_len,
+            tgt_emb_prj_weight_sharing=model_opt.proj_share_weight,
+            emb_src_tgt_weight_sharing=model_opt.embs_share_weight,
+            d_k=model_opt.d_k,
+            d_v=model_opt.d_v,
+            d_model=model_opt.d_model,
+            d_word_vec=model_opt.d_word_vec,
+            d_inner=model_opt.d_inner_hid,
+            n_layers=model_opt.n_layers,
+            n_head=model_opt.n_head,
+            dropout=model_opt.dropout)
+        transformer.load_state_dict(checkpoint['model'])
+        transformer = transformer.to(device)
 
     train(transformer, training_data, validation_data, optimizer, device ,opt)
 
