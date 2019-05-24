@@ -154,6 +154,10 @@ class TranslationDataset(Dataset):
     def generate_mistakes(self, name, word2idx):
         used = []
         num_mists = np.random.choice([1, 2, 3], p=[0.4, 0.3, 0.3])
+        if(len(name)<4):
+            return name
+        if(len(name)<6):
+            num_mists=1
         num = 0
         while(num<num_mists):
             mist_type = np.random.choice(['insert', 'change', 'swap', 'delete_letter'], p=[0.4, 0.3, 0.1, 0.2])

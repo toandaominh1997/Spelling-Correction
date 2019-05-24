@@ -66,15 +66,14 @@ def train_epoch(model, training_data, optimizer, device, smoothing):
     total_loss = 0
     n_word_total = 0
     n_word_correct = 0
-
     for batch in tqdm(
             training_data, mininterval=2,
             desc='  - (Training)   ', leave=False):
 
         # prepare data
         src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
-        gold = tgt_seq[:, 1:]
 
+        gold = tgt_seq[:, 1:]
         # forward
         optimizer.zero_grad()
         pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
@@ -209,27 +208,27 @@ def main():
     parser.add_argument('--num_worker', type=int, default=8)
 
     # parser.add_argument('-d_word_vec', type=int, default=512)
-    parser.add_argument('-d_model', type=int, default=512)
-    parser.add_argument('-d_inner_hid', type=int, default=2048)
-    parser.add_argument('-d_k', type=int, default=64)
-    parser.add_argument('-d_v', type=int, default=64)
+    parser.add_argument('--d_model', type=int, default=512)
+    parser.add_argument('--d_inner_hid', type=int, default=2048)
+    parser.add_argument('--d_k', type=int, default=64)
+    parser.add_argument('--d_v', type=int, default=64)
 
-    parser.add_argument('-n_head', type=int, default=8)
-    parser.add_argument('-n_layers', type=int, default=6)
-    parser.add_argument('-n_warmup_steps', type=int, default=4000)
+    parser.add_argument('--n_head', type=int, default=8)
+    parser.add_argument('--n_layers', type=int, default=6)
+    parser.add_argument('--n_warmup_steps', type=int, default=4000)
 
-    parser.add_argument('-dropout', type=float, default=0.1)
-    parser.add_argument('-embs_share_weight', action='store_true')
-    parser.add_argument('-proj_share_weight', action='store_true')
+    parser.add_argument('--dropout', type=float, default=0.1)
+    parser.add_argument('--embs_share_weight', action='store_true')
+    parser.add_argument('--proj_share_weight', action='store_true')
 
-    parser.add_argument('-model', default=None, help='Path to model file')
-    parser.add_argument('-log', default=None)
+    parser.add_argument('--model', default=None, help='Path to model file')
+    parser.add_argument('--log', default=None)
     parser.add_argument('--save_model', default=None)
     parser.add_argument('--save_data', default='./data/word2idx.pth')
-    parser.add_argument('-save_mode', type=str, choices=['all', 'best'], default='best')
+    parser.add_argument('--save_mode', type=str, choices=['all', 'best'], default='best')
 
-    parser.add_argument('-no_cuda', action='store_true')
-    parser.add_argument('-label_smoothing', action='store_true')
+    parser.add_argument('--no_cuda', action='store_true')
+    parser.add_argument('--label_smoothing', action='store_true')
 
     opt = parser.parse_args()
     opt.cuda = not opt.no_cuda
