@@ -13,154 +13,13 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data
 import transformer.Constants as Constants
-from dataset import TranslationDataset, paired_collate_fn
+from datasets.dataset import paired_collate_fn
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
 import transformer.Constants as Constants
 from util import generate_mistake
 from glob import glob
-
-def read_instances(dir_name, max_sent_len=100, keep_case=False, alphabet=None, training=False):
-    if(os.path.isdir(dir_name)):
-        for filename in glob('{}/*.*'.format(dir_name)):
-            inst_file = list(open(filename, encoding='utf-8'))
-            for sent in inst_file:
-                if(not keep_case):
-                    sent = sent.lower()
-                sent = sent.replace('\n', '').replace('\t', '')
-                if(training):
-                    words = list(sent)
-                    if(len(words) > max_sent_len):
-                        trimmed_sent_count +=1
-                    word_inst = words[:max_sent_len]
-                    if(word_inst):
-                        train_word_insts += [[Constants.BOS_WORD] + word_inst + [Constants.EOS_WORD]]
-                        target_word_insts += [[Constants.BOS_WORD] + word_inst + [Constants.EOS_WORD]]
-                        if(alphabet is not None):
-                            aug_words = generate_mistake.generate_mistakes(words, alphabet)
-                            if(len(aug_words) > max_sent_len):
-                                trimmed_sent_count +=1
-                            aug_word_inst = aug_words[:max_sent_len] 
-                            train_word_insts += [[Constants.BOS_WORD] + aug_word_inst + [Constants.EOS_WORD]]
-                            target_word_insts += [[Constants.BOS_WORD] + word_inst + [Constants.EOS_WORD]]
-                else:
-                    train_words, target_words = sent.split('|')
-                    if(len(train_words)>max_sent_len):
-                        trimmed_sent_count +=1
-                    if(len(target_words)>max_sent_len):
-                        trimmed_sent_count +=1
-                    train_words_inst, target_words_inst = list(train_words), list(target_words)
-                    train_word_insts += [[Constants.BOS_WORD] + train_words_inst + [Constants.EOS_WORD]]
-                    target_word_insts += [[Constants.BOS_WORD] + target_words_inst + [Constants.EOS_WORD]]
-    print('[Info] Get {} instances from {}'.format(len(train_word_insts), inst_file))
-
-    if trimmed_sent_count > 0:
-        print('[Warning] {} instances are trimmed to the max sentence length {}.'
-              .format(trimmed_sent_count, max_sent_len))
-
-    return train_word_insts, target_word_insts
-
-
-def build_vocab_idx(word_insts, min_word_count):
-    ''' Trim vocab by number of occurence '''
-
-    full_vocab = set(w for sent in word_insts for w in sent)
-    print('[Info] Original Vocabulary size =', len(full_vocab))
-
-    word2idx = {
-        Constants.BOS_WORD: Constants.BOS,
-        Constants.EOS_WORD: Constants.EOS,
-        Constants.PAD_WORD: Constants.PAD,
-        Constants.UNK_WORD: Constants.UNK}
-
-    word_count = {w: 0 for w in full_vocab}
-
-    for sent in word_insts:
-        for word in sent:
-            word_count[word] += 1
-
-    ignored_word_count = 0
-    for word, count in word_count.items():
-        if word not in word2idx:
-            if count > min_word_count:
-                word2idx[word] = len(word2idx)
-            else:
-                ignored_word_count += 1
-
-    print('[Info] Trimmed vocabulary size = {},'.format(len(word2idx)),
-          'each with minimum occurrence = {}'.format(min_word_count))
-    print("[Info] Ignored word count = {}".format(ignored_word_count))
-    return word2idx
-
-def convert_instance_to_idx_seq(word_insts, word2idx):
-    ''' Mapping words to idx sequence. '''
-    return [[word2idx.get(w, Constants.UNK) for w in s] for s in word_insts]
-
-def getvocab(dir_name):
-    vocab = list()
-    if(os.path.isdir(dir_name)):
-        for filename in glob('{}/*.*'.format(dir_name)):
-            vocab += list(open(filename, encoding='utf-8'))
-    else:
-        vocab += list(open(dir_name, encoding='utf-8'))
-    
-    alphabets = ''.join(sorted(set(''.join(vocab))))
-    return alphabets.replace('\n', '').replace('\t', '')
-
-
-def preprocess(train_src, valid_src, max_token_seq_len, min_word_count, keep_case):
-
-    # Training set
-    alphabets = getvocab(train_src)
-    train_src_word_insts, train_tgt_word_insts = read_instances(dir_name=train_src, max_sent_len=max_token_seq_len, keep_case=False, alphabet=alphabets, training=True)
-    if len(train_src_word_insts) != len(train_tgt_word_insts):
-        print('[Warning] The training instance count is not equal.')
-        min_inst_count = min(len(train_src_word_insts), len(train_tgt_word_insts))
-        train_src_word_insts = train_src_word_insts[:min_inst_count]
-        train_tgt_word_insts = train_tgt_word_insts[:min_inst_count]
-    #- Remove empty instances
-    train_src_word_insts, train_tgt_word_insts = list(zip(*[
-        (s, t) for s, t in zip(train_src_word_insts, train_tgt_word_insts) if s and t]))
-
-    # Validation set
-    valid_src_word_insts, valid_tgt_word_insts = read_instances(dir_name=valid_src, max_sent_len=max_token_seq_len, keep_case=False, alphabet=alphabets, training=False)
-    
-    if len(valid_src_word_insts) != len(valid_tgt_word_insts):
-        print('[Warning] The validation instance count is not equal.')
-        min_inst_count = min(len(valid_src_word_insts), len(valid_tgt_word_insts))
-        valid_src_word_insts = valid_src_word_insts[:min_inst_count]
-        valid_tgt_word_insts = valid_tgt_word_insts[:min_inst_count]
-
-    #- Remove empty instances
-    valid_src_word_insts, valid_tgt_word_insts = list(zip(*[
-        (s, t) for s, t in zip(valid_src_word_insts, valid_tgt_word_insts) if s and t]))
-    
-    print('[Info] Build vocabulary for source.')
-    src_word2idx = build_vocab_idx(train_src_word_insts, min_word_count)
-    print('[Info] Build vocabulary for target.')
-    tgt_word2idx = build_vocab_idx(train_tgt_word_insts, min_word_count)
-
-    # word to index
-    print('[Info] Convert source word instances into sequences of word index.')
-    train_src_insts = convert_instance_to_idx_seq(train_src_word_insts, src_word2idx)
-    valid_src_insts = convert_instance_to_idx_seq(valid_src_word_insts, src_word2idx)
-
-    print('[Info] Convert target word instances into sequences of word index.')
-    train_tgt_insts = convert_instance_to_idx_seq(train_tgt_word_insts, tgt_word2idx)
-    valid_tgt_insts = convert_instance_to_idx_seq(valid_tgt_word_insts, tgt_word2idx)
-
-    data = {
-        'dict': {
-            'src': src_word2idx,
-            'tgt': tgt_word2idx},
-        'train': {
-            'src': train_src_insts,
-            'tgt': train_tgt_insts},
-        'valid': {
-            'src': valid_src_insts,
-            'tgt': valid_tgt_insts}}
-    
-    return data
+from datasets import dataset
 
 
 def cal_performance(pred, gold, smoothing=False):
@@ -293,8 +152,6 @@ def train(model, training_data, validation_data, optimizer, device, opt):
     valid_accus = []
     for epoch_i in range(opt.epoch):
         print('[ Epoch', epoch_i, ']')
-        data = preprocess(train_src=opt.train_src, valid_src=opt.valid_src, max_token_seq_len=opt.max_token_seq_len, min_word_count=opt.min_word_count, keep_case=opt.keep_case)
-        training_data, validation_data = prepare_dataloaders(data, opt)
         start = time.time()
         train_loss, train_accu = train_epoch(
             model, training_data, optimizer, device, smoothing=opt.label_smoothing)
@@ -347,8 +204,8 @@ def main():
     parser.add_argument('--min_word_count', type=int, default=5)
     parser.add_argument('--keep_case', action='store_true')
 
-    parser.add_argument('-epoch', type=int, default=500)
-    parser.add_argument('-batch_size', type=int, default=64)
+    parser.add_argument('--epoch', type=int, default=500)
+    parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--num_worker', type=int, default=8)
 
     # parser.add_argument('-d_word_vec', type=int, default=512)
@@ -367,7 +224,8 @@ def main():
 
     parser.add_argument('-model', default=None, help='Path to model file')
     parser.add_argument('-log', default=None)
-    parser.add_argument('-save_model', default=None)
+    parser.add_argument('--save_model', default=None)
+    parser.add_argument('--save_data', default='./data/word2idx.pth')
     parser.add_argument('-save_mode', type=str, choices=['all', 'best'], default='best')
 
     parser.add_argument('-no_cuda', action='store_true')
@@ -377,11 +235,45 @@ def main():
     opt.cuda = not opt.no_cuda
     opt.d_word_vec = opt.d_model
 
-    #========= Loading Dataset =========#
     opt.max_token_seq_len = opt.max_word_seq_len + 2
-    data = preprocess(train_src=opt.train_src, valid_src=opt.valid_src, max_token_seq_len=opt.max_token_seq_len, min_word_count=opt.min_word_count, keep_case=opt.keep_case)
-    training_data, validation_data = prepare_dataloaders(data, opt)
-
+    #========= Loading Dataset =========#
+    training_data = torch.utils.data.DataLoader(
+        dataset.TranslationDataset(
+            dir_name=opt.train_src,
+            max_word_seq_len= opt.max_word_seq_len,
+            min_word_count=opt.min_word_count,
+            keep_case=opt.keep_case,
+            training=True,
+            src_word2idx=None,
+            tgt_word2idx=None
+            ),
+        num_workers=opt.num_worker,
+        batch_size=opt.batch_size,
+        collate_fn=paired_collate_fn,
+        shuffle=True)
+    validation_data = torch.utils.data.DataLoader(
+        dataset.TranslationDataset(
+            dir_name=opt.valid_src,
+            max_word_seq_len= opt.max_word_seq_len,
+            min_word_count=opt.min_word_count,
+            keep_case=opt.keep_case,
+            training=False,
+            src_word2idx=training_data.dataset.src_word2idx,
+            tgt_word2idx=training_data.dataset.tgt_word2idx
+            ),
+        num_workers=opt.num_worker,
+        batch_size=opt.batch_size,
+        collate_fn=paired_collate_fn,
+        shuffle=True)
+    data = {
+        'dict': {
+            'src': training_data.dataset.src_word2idx,
+            'tgt': training_data.dataset.tgt_word2idx}
+        }
+    print('[Info] Dumping the processed data to pickle file', opt.save_data)
+    torch.save(data, opt.save_data)
+    print('[Info] Finish.')
+    del data
     opt.src_vocab_size = training_data.dataset.src_vocab_size
     opt.tgt_vocab_size = training_data.dataset.tgt_vocab_size
 
@@ -437,29 +329,6 @@ def main():
     train(transformer, training_data, validation_data, optimizer, device ,opt)
 
 
-def prepare_dataloaders(data, opt):
-    # ========= Preparing DataLoader =========#
-    train_loader = torch.utils.data.DataLoader(
-        TranslationDataset(
-            src_word2idx=data['dict']['src'],
-            tgt_word2idx=data['dict']['tgt'],
-            src_insts=data['train']['src'],
-            tgt_insts=data['train']['tgt']),
-        num_workers=opt.num_worker,
-        batch_size=opt.batch_size,
-        collate_fn=paired_collate_fn,
-        shuffle=True)
-
-    valid_loader = torch.utils.data.DataLoader(
-        TranslationDataset(
-            src_word2idx=data['dict']['src'],
-            tgt_word2idx=data['dict']['tgt'],
-            src_insts=data['valid']['src'],
-            tgt_insts=data['valid']['tgt']),
-        num_workers=2,
-        batch_size=opt.batch_size,
-        collate_fn=paired_collate_fn)
-    return train_loader, valid_loader
 
 
 if __name__ == '__main__':

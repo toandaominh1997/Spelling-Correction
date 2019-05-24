@@ -206,9 +206,7 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--train_src', required=True)
-    # parser.add_argument('-train_tgt', required=True)
     parser.add_argument('--valid_src', required=True)
-    # parser.add_argument('-valid_tgt', required=True)
     parser.add_argument('--save_data', required=True)
     parser.add_argument('--max_word_seq_len', type=int, default=100)
     parser.add_argument('--min_word_count', type=int, default=5)
