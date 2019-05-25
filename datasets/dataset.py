@@ -152,43 +152,53 @@ class TranslationDataset(Dataset):
         ''' Property for index dictionary '''
         return self._tgt_idx2word
     def generate_mistakes(self, name, word2idx):
-        used = []
         num_mists = np.random.choice([1, 2, 3], p=[0.4, 0.3, 0.3])
-        if(len(name)<4):
-            return name
-        if(len(name)<6):
-            num_mists=1
         num = 0
+        list_choice = [1]*len(name)
+        list_choice[0] = list_choice[len(name)-1] = 0
         while(num<num_mists):
             mist_type = np.random.choice(['insert', 'change', 'swap', 'delete_letter'], p=[0.4, 0.3, 0.1, 0.2])
-            while(True):
-                idx = np.random.randint(low=1, high=len(name)-1)
-                if(idx not in used):
-                    break
+
+            choice = list()
+            for i, w in enumerate(list_choice):
+                if(w==1):
+                    choice.append(i)
+            if(len(choice)<3):
+                break
+            idx = np.random.choice(choice)
             num+=1
-            used.append(idx)
+
             if(mist_type=='insert'):
                 new_letter = np.random.randint(low=4, high=len(word2idx))
                 if(np.random.rand()<0.5):
                     name.insert(idx, new_letter)
+                    list_choice.insert(idx, 0)
                 else:
                     name.insert(idx+1, new_letter)
+                    list_choice.insert(idx+1, 0)
                  
             if(mist_type=='change'):
                 new_letter = np.random.randint(low=4, high=len(word2idx))
                 name[idx] = new_letter
+                list_choice[idx] = 0
             if(mist_type=='swap'):
+                list_choice[idx] = 0
                 if(idx==0):
                     name[idx], name[idx+1] = name[idx+1], name[idx]
+                    list_choice[idx+1] = 0
                 if(idx==len(name)-2):
                     name[idx], name[idx-1] = name[idx-1], name[idx]
+                    list_choice[idx-1] = 0
                 else:
                     if(np.random.rand() < 0.5):
                         name[idx], name[idx+1] = name[idx+1], name[idx]
+                        list_choice[idx+1] = 0
                     else:
                         name[idx], name[idx-1] = name[idx-1], name[idx]
+                        list_choice[idx-1] = 0
             if(mist_type=='delete_letter'):
                 name.pop(idx) 
+                list_choice.pop(idx)
         return name
     def __len__(self):
         return self.n_insts

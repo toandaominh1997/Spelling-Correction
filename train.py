@@ -17,7 +17,6 @@ from datasets.dataset import paired_collate_fn
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
 import transformer.Constants as Constants
-from util import generate_mistake
 from glob import glob
 from datasets import dataset
 
