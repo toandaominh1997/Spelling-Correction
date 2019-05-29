@@ -25,6 +25,7 @@ class TranslationDataset(Dataset):
         tgt_word_insts = []
         trimmed_sent_count = 0
         if(os.path.isdir(dir_name)):
+            training=False
             for filename in glob('{}/*.*'.format(dir_name)):
                 inst_file = list(open(filename, encoding='utf-8'))
                 for sent in inst_file:
@@ -97,6 +98,8 @@ class TranslationDataset(Dataset):
             min_inst_count = min(len(src_word_insts), len(tgt_word_insts))
             src_word_insts = src_word_insts[:min_inst_count]
             tgt_word_insts = tgt_word_insts[:min_inst_count]
+        
+        print('src_word_insts: ', len(src_word_insts))
         #- Remove empty instances
         src_word_insts, tgt_word_insts = list(zip(*[
             (s, t) for s, t in zip(src_word_insts, tgt_word_insts) if s and t]))
@@ -220,7 +223,7 @@ def paired_collate_fn(insts):
 
 def collate_fn(insts):
     ''' Pad the instance to the max seq length in batch '''
-
+    
     max_len = max(len(inst) for inst in insts)
 
     batch_seq = np.array([

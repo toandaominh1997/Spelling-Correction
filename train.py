@@ -19,8 +19,8 @@ from transformer.Optim import ScheduledOptim
 import transformer.Constants as Constants
 from glob import glob
 from datasets import dataset
-
-
+import constants
+from model.encoder_decoder import make_model
 def cal_performance(pred, gold, smoothing=False):
     ''' Apply label smoothing if needed '''
 
@@ -71,12 +71,29 @@ def train_epoch(model, training_data, optimizer, device, smoothing):
 
         # prepare data
         src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
-
+        if constants.name_model=='transformer':
+            pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
+        else:
+            src_mask = (src_seq!=0).unsqueeze(-2)
+            trg_mask = (tgt_seq!=0)
+            tgt_seq = tgt_seq[:, :-1]
+            src_lengths = []
+            tgt_lengths = []
+            for seq in src_seq:
+                for i, w in enumerate(seq):
+                    if w==Constants.PAD:
+                        src_lengths+=[[i+1]]
+                        break
+            for seq in tgt_seq:
+                for i, w in enumerate(seq):
+                    if w==Constants.PAD:
+                        tgt_lengths+=[[i+1]]
+                        break
+            print('src_seq: ', src_seq.size())
+            pred = model(src=src_seq, trg=tgt_seq, src_mask=src_mask, trg_mask=trg_mask, src_lengths=src_lengths, trg_lengths=tgt_lengths, cn=0)
         gold = tgt_seq[:, 1:]
         # forward
         optimizer.zero_grad()
-        pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-
         # backward
         loss, n_correct = cal_performance(pred, gold, smoothing=smoothing)
         loss.backward()
@@ -220,7 +237,7 @@ def main():
     parser.add_argument('--embs_share_weight', action='store_true')
     parser.add_argument('--proj_share_weight', action='store_true')
 
-    parser.add_argument('--model', default=None, help='Path to model file')
+    parser.add_argument('--name_model', default=None, help='Path to model file')
     parser.add_argument('--log', default=None)
     parser.add_argument('--save_model', default=None)
     parser.add_argument('--save_data', default='./data/word2idx.pth')
@@ -262,7 +279,7 @@ def main():
         num_workers=opt.num_worker,
         batch_size=opt.batch_size,
         collate_fn=paired_collate_fn,
-        shuffle=True)
+        shuffle=False)
     data = {
         'dict': {
             'src': training_data.dataset.src_word2idx,
@@ -283,48 +300,38 @@ def main():
     print(opt)
 
     device = torch.device('cuda' if opt.cuda else 'cpu')
-    transformer = Transformer(
-        opt.src_vocab_size,
-        opt.tgt_vocab_size,
-        opt.max_token_seq_len,
-        tgt_emb_prj_weight_sharing=opt.proj_share_weight,
-        emb_src_tgt_weight_sharing=opt.embs_share_weight,
-        d_k=opt.d_k,
-        d_v=opt.d_v,
-        d_model=opt.d_model,
-        d_word_vec=opt.d_word_vec,
-        d_inner=opt.d_inner_hid,
-        n_layers=opt.n_layers,
-        n_head=opt.n_head,
-        dropout=opt.dropout).to(device)
+    if(constants.name_model =='transformer'):
+        model = Transformer(
+            opt.src_vocab_size,
+            opt.tgt_vocab_size,
+            opt.max_token_seq_len,
+            tgt_emb_prj_weight_sharing=opt.proj_share_weight,
+            emb_src_tgt_weight_sharing=opt.embs_share_weight,
+            d_k=opt.d_k,
+            d_v=opt.d_v,
+            d_model=opt.d_model,
+            d_word_vec=opt.d_word_vec,
+            d_inner=opt.d_inner_hid,
+            n_layers=opt.n_layers,
+            n_head=opt.n_head,
+            dropout=opt.dropout).to(device)
 
+    else:
+        model = make_model(opt.src_vocab_size,
+        opt.tgt_vocab_size,
+        device=device,
+        emb_size=opt.d_model,
+        hidden_size=opt.d_inner_hid,
+        num_layers=opt.n_layers,
+        dropout=opt.dropout,
+        num_classes=opt.tgt_vocab_size)
     optimizer = ScheduledOptim(
         optim.Adam(
-            filter(lambda x: x.requires_grad, transformer.parameters()),
+            filter(lambda x: x.requires_grad, model.parameters()),
             betas=(0.9, 0.98), eps=1e-09),
         opt.d_model, opt.n_warmup_steps)
-    if(opt.model is not None):
-        print('pretrain model!')
-        checkpoint = torch.load(opt.model)
-        model_opt = checkpoint['settings']
-        transformer = Transformer(
-            model_opt.src_vocab_size,
-            model_opt.tgt_vocab_size,
-            model_opt.max_token_seq_len,
-            tgt_emb_prj_weight_sharing=model_opt.proj_share_weight,
-            emb_src_tgt_weight_sharing=model_opt.embs_share_weight,
-            d_k=model_opt.d_k,
-            d_v=model_opt.d_v,
-            d_model=model_opt.d_model,
-            d_word_vec=model_opt.d_word_vec,
-            d_inner=model_opt.d_inner_hid,
-            n_layers=model_opt.n_layers,
-            n_head=model_opt.n_head,
-            dropout=model_opt.dropout)
-        transformer.load_state_dict(checkpoint['model'])
-        transformer = transformer.to(device)
 
-    train(transformer, training_data, validation_data, optimizer, device ,opt)
+    train(model, training_data, validation_data, optimizer, device ,opt)
 
 
 
