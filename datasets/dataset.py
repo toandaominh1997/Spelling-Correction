@@ -25,7 +25,6 @@ class TranslationDataset(Dataset):
         tgt_word_insts = []
         trimmed_sent_count = 0
         if(os.path.isdir(dir_name)):
-            training=False
             for filename in glob('{}/*.*'.format(dir_name)):
                 inst_file = list(open(filename, encoding='utf-8'))
                 for sent in inst_file:
