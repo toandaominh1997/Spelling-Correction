@@ -1,1 +1,1 @@
-name_model = 'transformer'
+name_model = 'encoder-decoder'
