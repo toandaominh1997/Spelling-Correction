@@ -99,12 +99,14 @@ class EncoderDecoder(nn.Module):
         
         clf_logits = self.classifier(encoder_hidden)
         
-        return self.decode(encoder_hidden,
+        decoder_states, hidden, pre_output_vectors  = self.decode(encoder_hidden,
                            encoder_final,
                            src_mask,
                            trg,
                            trg_mask,
-                           cn=cn),clf_logits
+                           cn=cn)
+        x = self.generator(pre_output_vectors) 
+        return x.view(-1, x.size(-1))
     
     def encode(self,
                src, src_mask, src_lengths,
@@ -368,22 +370,19 @@ class Encoder(nn.Module):
         self.num_layers = num_layers
         self.rnn = nn.GRU(input_size, hidden_size, num_layers, 
                           batch_first=True, bidirectional=True, dropout=dropout)
-        
     def forward(self, x, mask, lengths):
         """
         Applies a bidirectional GRU to sequence of embeddings x.
         The input mini-batch x needs to be sorted by length.
         x should have dimensions [batch, time, dim].
         """
-        packed = pack_padded_sequence(x, lengths, batch_first=True)
-        output, final = self.rnn(packed)
-        output, _ = pad_packed_sequence(output, batch_first=True)
-
+        #packed = pack_padded_sequence(x, lengths, batch_first=True)
+        output, final = self.rnn(x)
+        #output, _ = pad_packed_sequence(output, batch_first=True)
         # we need to manually concatenate the final states for both directions
         fwd_final = final[0:final.size(0):2]
         bwd_final = final[1:final.size(0):2]
         final = torch.cat([fwd_final, bwd_final], dim=2)  # [num_layers, batch, 2*dim]
-
         return output, final
     
 class BahdanauAttention(nn.Module):
@@ -396,38 +395,39 @@ class BahdanauAttention(nn.Module):
         key_size = 2 * hidden_size if key_size is None else key_size
         query_size = hidden_size if query_size is None else query_size
 
-        self.key_layer = nn.Linear(key_size, hidden_size, bias=False)
         self.query_layer = nn.Linear(query_size, hidden_size, bias=False)
+        self.key_layer = nn.Linear(key_size, hidden_size, bias=False)
         self.energy_layer = nn.Linear(hidden_size, 1, bias=False)
         
         # to store attention scores
         self.alphas = None
         
     def forward(self, query=None, proj_key=None, value=None, mask=None):
+        '''
+        query: (B x 1 x dim)
+        proj_key: (B x seq_len x dim)
+        value: (B x seq_len x dim*2)
+        '''
         assert mask is not None, "mask is required"
 
-        # We first project the query (the decoder state).
-        # The projected keys (the encoder states) were already pre-computated.
-        query = self.query_layer(query)
+        # query: (B x 1 x feature)
+        query = self.query_layer(query) # query: (B x 1 x hidden size)
         
         # Calculate scores.
-        scores = self.energy_layer(torch.tanh(query + proj_key))
-        scores = scores.squeeze(2).unsqueeze(1)
+        scores = self.energy_layer(torch.tanh(query + proj_key)) # scores: (B x seq_len x 1)
+        scores = scores.squeeze(2).unsqueeze(1) # scores: (B x 1 x seq_len)
         
         # Mask out invalid positions.
-        # The mask marks valid positions so we invert it using `mask & 0`.
-        print('mask: ', mask.size())
-        print('scores: ', scores.size())
+        # The mask marks valid positions so we invert it using `mask & 0`
         scores.data.masked_fill_(mask == 0, -float('inf'))
         
         # Turn scores to probabilities.
-        alphas = F.softmax(scores, dim=-1)
-        self.alphas = alphas        
-        
+        alphas = F.softmax(scores, dim=-1) # alphas: (B x 1 x seq_len)
+        self.alphas = alphas
         # The context vector is the weighted sum of the values.
-        context = torch.bmm(alphas, value)
+        context = torch.bmm(alphas, value) # context: (B x 1 x dim*2)
         
-        # context shape: [B, 1, 2D], alphas shape: [B, 1, M]
+        # context: (B, 1, 2*dim), alphas shape: (B, 1, seq_len)
         return context, alphas    
     
 class Decoder(nn.Module):
@@ -443,6 +443,7 @@ class Decoder(nn.Module):
         self.attention = attention
         self.dropout = dropout
         self.add_input_skip = add_input_skip
+
         
         if add_input_skip:
             self.skip_attention = skip_attention
@@ -475,6 +476,7 @@ class Decoder(nn.Module):
         """Perform a single decoder step (1 word)"""
         
         # compute context vector using attention mechanism
+
         query = hidden[-1].unsqueeze(1)  # [#layers, B, D] -> [B, 1, D]
         context, attn_probs = self.attention(
             query=query, proj_key=proj_key,
@@ -483,7 +485,7 @@ class Decoder(nn.Module):
         if self.add_input_skip:
             context_skip, attn_probs_skip = self.attention(
                 query=query, proj_key=skip_key,
-                value=skip, mask=src_mask)            
+                value=skip, mask=src_mask)
         
         # update rnn hidden state
         rnn_input = torch.cat([prev_embed, context], dim=2)
@@ -499,23 +501,21 @@ class Decoder(nn.Module):
 
         return output, hidden, pre_output
     
-    def forward(self, trg_embed, entrg_masktrg_maskcoder_hidden, encoder_final, 
+    def forward(self, trg_embed, encoder_hidden, encoder_final, 
                 src_mask, trg_mask, hidden=None, max_len=None, skip=None):
         """Unroll the decoder one step at a time."""
-                                         
+        
         # the maximum number of steps to unroll the RNN
         if max_len is None:
             max_len = trg_mask.size(-1)
 
-        # initialize decoder hidden state
+        # initialize decoder hidden state, hidden: (num_layers, batch_size, hidden_size) 
         if hidden is None:
             hidden = self.init_hidden(encoder_final)
-        
-        # pre-compute projected encoder hidden states
-        # (the "keys" for the attention mechanism)
-        # this is only done for efficiency
+
+
         proj_key = self.attention.key_layer(encoder_hidden)
-        
+
         if self.add_input_skip:
             # also for the skip connection
             skip_key = self.skip_attention.key_layer(skip)

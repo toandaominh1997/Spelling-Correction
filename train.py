@@ -56,7 +56,6 @@ def cal_loss(pred, gold, smoothing):
 
     return loss
 
-
 def train_epoch(model, training_data, optimizer, device, smoothing):
     ''' Epoch operation in training phase'''
 
@@ -71,27 +70,35 @@ def train_epoch(model, training_data, optimizer, device, smoothing):
 
         # prepare data
         src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
+
+        gold = tgt_seq[:, 1:]
         if constants.name_model=='transformer':
             pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
         else:
             src_mask = (src_seq!=0).unsqueeze(-2)
-            trg_mask = (tgt_seq!=0)
             tgt_seq = tgt_seq[:, :-1]
-            src_lengths = []
-            tgt_lengths = []
-            for seq in src_seq:
-                for i, w in enumerate(seq):
+            trg_mask = (tgt_seq!=0)
+            src_lengths = list()
+            tgt_lengths = list()
+            for seq in range(src_seq.size(0)):
+                check=False
+                for i, w in enumerate(src_seq[seq]):
                     if w==Constants.PAD:
-                        src_lengths+=[[i+1]]
+                        src_lengths.append(i+1)
+                        check=True
                         break
-            for seq in tgt_seq:
-                for i, w in enumerate(seq):
+                if(check==False):
+                    src_lengths.append(len(src_seq[seq]))
+            for seq in range(tgt_seq.size(0)):
+                for i, w in enumerate(tgt_seq[seq]):
+                    check=False
                     if w==Constants.PAD:
-                        tgt_lengths+=[[i+1]]
+                        check=True
+                        tgt_lengths.append(i+1)
                         break
-            print('src_seq: ', src_seq.size())
+                if check==False:
+                    tgt_lengths.append(len(tgt_seq[seq]))
             pred = model(src=src_seq, trg=tgt_seq, src_mask=src_mask, trg_mask=trg_mask, src_lengths=src_lengths, trg_lengths=tgt_lengths, cn=0)
-        gold = tgt_seq[:, 1:]
         # forward
         optimizer.zero_grad()
         # backward
@@ -131,8 +138,35 @@ def eval_epoch(model, validation_data, device):
             src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
             gold = tgt_seq[:, 1:]
 
+
             # forward
-            pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
+            if constants.name_model=='transformer':
+                pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
+            else:
+                src_mask = (src_seq!=0).unsqueeze(-2)
+                tgt_seq = tgt_seq[:, :-1]
+                trg_mask = (tgt_seq!=0)
+                src_lengths = list()
+                tgt_lengths = list()
+                for seq in range(src_seq.size(0)):
+                    check=False
+                    for i, w in enumerate(src_seq[seq]):
+                        if w==Constants.PAD:
+                            src_lengths.append(i+1)
+                            check=True
+                            break
+                    if(check==False):
+                        src_lengths.append(len(src_seq[seq]))
+                for seq in range(tgt_seq.size(0)):
+                    for i, w in enumerate(tgt_seq[seq]):
+                        check=False
+                        if w==Constants.PAD:
+                            check=True
+                            tgt_lengths.append(i+1)
+                            break
+                    if check==False:
+                        tgt_lengths.append(len(tgt_seq[seq]))
+                pred = model(src=src_seq, trg=tgt_seq, src_mask=src_mask, trg_mask=trg_mask, src_lengths=src_lengths, trg_lengths=tgt_lengths, cn=0)
             loss, n_correct = cal_performance(pred, gold, smoothing=False)
 
             # note keeping
@@ -219,7 +253,7 @@ def main():
     parser.add_argument('--min_word_count', type=int, default=5)
     parser.add_argument('--keep_case', action='store_true')
 
-    parser.add_argument('--epoch', type=int, default=500)
+    parser.add_argument('--epoch', type=int, default=5000)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--num_worker', type=int, default=8)
 

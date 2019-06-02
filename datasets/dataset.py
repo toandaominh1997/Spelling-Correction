@@ -99,7 +99,6 @@ class TranslationDataset(Dataset):
             src_word_insts = src_word_insts[:min_inst_count]
             tgt_word_insts = tgt_word_insts[:min_inst_count]
         
-        print('src_word_insts: ', len(src_word_insts))
         #- Remove empty instances
         src_word_insts, tgt_word_insts = list(zip(*[
             (s, t) for s, t in zip(src_word_insts, tgt_word_insts) if s and t]))
@@ -121,7 +120,7 @@ class TranslationDataset(Dataset):
     def n_insts(self):
         ''' Property for dataset size '''
         if(self.training):
-            return len(self._src_insts)*2
+            return len(self._src_insts)*10
         else:
             return len(self._src_insts)
 

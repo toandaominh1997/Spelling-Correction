@@ -1,3 +1,6 @@
 data
 __pycache__
 kaka.chkpt
+trained.chkpt
+.vscode
+__pycache__
