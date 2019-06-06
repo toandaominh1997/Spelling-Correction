@@ -21,6 +21,8 @@ from glob import glob
 from datasets import dataset
 import constants
 from model.encoder_decoder import make_model
+import time 
+
 def cal_performance(pred, gold, smoothing=False):
     ''' Apply label smoothing if needed '''
 
@@ -43,7 +45,6 @@ def cal_loss(pred, gold, smoothing):
     if smoothing:
         eps = 0.1
         n_class = pred.size(1)
-
         one_hot = torch.zeros_like(pred).scatter(1, gold.view(-1, 1), 1)
         one_hot = one_hot * (1 - eps) + (1 - one_hot) * eps / (n_class - 1)
         log_prb = F.log_softmax(pred, dim=1)
@@ -60,7 +61,6 @@ def train_epoch(model, training_data, optimizer, device, smoothing):
     ''' Epoch operation in training phase'''
 
     model.train()
-
     total_loss = 0
     n_word_total = 0
     n_word_correct = 0
@@ -128,7 +128,7 @@ def eval_epoch(model, validation_data, device):
     total_loss = 0
     n_word_total = 0
     n_word_correct = 0
-
+    start = time.time()
     with torch.no_grad():
         for batch in tqdm(
                 validation_data, mininterval=2,
@@ -176,7 +176,6 @@ def eval_epoch(model, validation_data, device):
             n_word = non_pad_mask.sum().item()
             n_word_total += n_word
             n_word_correct += n_correct
-
     loss_per_word = total_loss/n_word_total
     accuracy = n_word_correct/n_word_total
     return loss_per_word, accuracy

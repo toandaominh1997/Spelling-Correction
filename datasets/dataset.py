@@ -119,7 +119,7 @@ class TranslationDataset(Dataset):
     def n_insts(self):
         ''' Property for dataset size '''
         if(self.training):
-            return len(self._src_insts)*10
+            return len(self._src_insts)*2
         else:
             return len(self._src_insts)
 
@@ -234,5 +234,5 @@ def collate_fn(insts):
 
     batch_seq = torch.LongTensor(batch_seq)
     batch_pos = torch.LongTensor(batch_pos)
-
+    
     return batch_seq, batch_pos
