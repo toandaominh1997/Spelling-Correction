@@ -212,27 +212,27 @@ class TranslationDataset(Dataset):
         else:
             return self.generate_mistakes(self._src_insts[index%len(self._src_insts)], self._src_word2idx), self._tgt_insts[index%len(self._src_insts)]
 
-
-def paired_collate_fn(insts):
-    src_insts, tgt_insts = list(zip(*insts))
-    src_insts = collate_fn(src_insts)
-    tgt_insts = collate_fn(tgt_insts)
-    return (*src_insts, *tgt_insts)
-
-def collate_fn(insts):
-    ''' Pad the instance to the max seq length in batch '''
+class alignCollate(object):
+    def __init__(self, args):
+        self.args = args
+    def __call__(self, batch):
+        src_instance , tgt_instance = list(zip(*batch))
+        src_instance = self.collate_fn(src_instance)
+        tgt_instance = self.collate_fn(tgt_instance)
+        return (*src_instance, *tgt_instance)
     
-    max_len = max(len(inst) for inst in insts)
+    def collate_fn(self, insts):
+        max_len = max(len(inst) for inst in insts)
 
-    batch_seq = np.array([
-        inst + [Constants.PAD] * (max_len - len(inst))
-        for inst in insts])
+        batch_seq = np.array([
+            inst + [Constants.PAD] * (max_len - len(inst))
+            for inst in insts])
 
-    batch_pos = np.array([
-        [pos_i+1 if w_i != Constants.PAD else 0
-         for pos_i, w_i in enumerate(inst)] for inst in batch_seq])
+        batch_pos = np.array([
+            [pos_i+1 if w_i != Constants.PAD else 0
+            for pos_i, w_i in enumerate(inst)] for inst in batch_seq])
 
-    batch_seq = torch.LongTensor(batch_seq)
-    batch_pos = torch.LongTensor(batch_pos)
-    
-    return batch_seq, batch_pos
+        batch_seq = torch.LongTensor(batch_seq)
+        batch_pos = torch.LongTensor(batch_pos)
+        
+        return batch_seq, batch_pos

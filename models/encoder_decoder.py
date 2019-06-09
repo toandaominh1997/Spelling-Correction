@@ -488,6 +488,7 @@ class Decoder(nn.Module):
                 value=skip, mask=src_mask)
         
         # update rnn hidden state
+        
         rnn_input = torch.cat([prev_embed, context], dim=2)
         output, hidden = self.rnn(rnn_input, hidden)
         
@@ -547,3 +548,4 @@ class Decoder(nn.Module):
             return None  # start with zeros
 
         return torch.tanh(self.bridge(encoder_final))
+

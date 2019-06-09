@@ -13,15 +13,15 @@ import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data
 import transformer.Constants as Constants
-from datasets.dataset import paired_collate_fn
 from transformer.Models import Transformer
 from transformer.Optim import ScheduledOptim
 import transformer.Constants as Constants
 from glob import glob
 from datasets import dataset
 import constants
-from model.encoder_decoder import make_model
+from models.encoder_decoder import make_model
 import time 
+from models.model import Seq2seq
 
 def cal_performance(pred, gold, smoothing=False):
     ''' Apply label smoothing if needed '''
@@ -57,49 +57,20 @@ def cal_loss(pred, gold, smoothing):
 
     return loss
 
-def train_epoch(model, training_data, optimizer, device, smoothing):
+def train_epoch(model, train_dataloader, optimizer, device, smoothing):
     ''' Epoch operation in training phase'''
 
     model.train()
     total_loss = 0
     n_word_total = 0
     n_word_correct = 0
-    for batch in tqdm(
-            training_data, mininterval=2,
-            desc='  - (Training)   ', leave=False):
+    for batch in tqdm(train_dataloader, mininterval=2, desc='  - (Training)   ', leave=False):
 
         # prepare data
         src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
 
         gold = tgt_seq[:, 1:]
-        if constants.name_model=='transformer':
-            pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-        else:
-            src_mask = (src_seq!=0).unsqueeze(-2)
-            tgt_seq = tgt_seq[:, :-1]
-            trg_mask = (tgt_seq!=0)
-            src_lengths = list()
-            tgt_lengths = list()
-            for seq in range(src_seq.size(0)):
-                check=False
-                for i, w in enumerate(src_seq[seq]):
-                    if w==Constants.PAD:
-                        src_lengths.append(i+1)
-                        check=True
-                        break
-                if(check==False):
-                    src_lengths.append(len(src_seq[seq]))
-            for seq in range(tgt_seq.size(0)):
-                for i, w in enumerate(tgt_seq[seq]):
-                    check=False
-                    if w==Constants.PAD:
-                        check=True
-                        tgt_lengths.append(i+1)
-                        break
-                if check==False:
-                    tgt_lengths.append(len(tgt_seq[seq]))
-            pred = model(src=src_seq, trg=tgt_seq, src_mask=src_mask, trg_mask=trg_mask, src_lengths=src_lengths, trg_lengths=tgt_lengths, cn=0)
-        # forward
+        pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
         optimizer.zero_grad()
         # backward
         loss, n_correct = cal_performance(pred, gold, smoothing=smoothing)
@@ -120,7 +91,7 @@ def train_epoch(model, training_data, optimizer, device, smoothing):
     accuracy = n_word_correct/n_word_total
     return loss_per_word, accuracy
 
-def eval_epoch(model, validation_data, device):
+def eval_epoch(model, valid_dataloader, device):
     ''' Epoch operation in evaluation phase '''
 
     model.eval()
@@ -131,42 +102,13 @@ def eval_epoch(model, validation_data, device):
     start = time.time()
     with torch.no_grad():
         for batch in tqdm(
-                validation_data, mininterval=2,
+                valid_dataloader, mininterval=2,
                 desc='  - (Validation) ', leave=False):
 
             # prepare data
             src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
             gold = tgt_seq[:, 1:]
-
-
-            # forward
-            if constants.name_model=='transformer':
-                pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
-            else:
-                src_mask = (src_seq!=0).unsqueeze(-2)
-                tgt_seq = tgt_seq[:, :-1]
-                trg_mask = (tgt_seq!=0)
-                src_lengths = list()
-                tgt_lengths = list()
-                for seq in range(src_seq.size(0)):
-                    check=False
-                    for i, w in enumerate(src_seq[seq]):
-                        if w==Constants.PAD:
-                            src_lengths.append(i+1)
-                            check=True
-                            break
-                    if(check==False):
-                        src_lengths.append(len(src_seq[seq]))
-                for seq in range(tgt_seq.size(0)):
-                    for i, w in enumerate(tgt_seq[seq]):
-                        check=False
-                        if w==Constants.PAD:
-                            check=True
-                            tgt_lengths.append(i+1)
-                            break
-                    if check==False:
-                        tgt_lengths.append(len(tgt_seq[seq]))
-                pred = model(src=src_seq, trg=tgt_seq, src_mask=src_mask, trg_mask=trg_mask, src_lengths=src_lengths, trg_lengths=tgt_lengths, cn=0)
+            pred = model(src_seq, src_pos, tgt_seq, tgt_pos)
             loss, n_correct = cal_performance(pred, gold, smoothing=False)
 
             # note keeping
@@ -180,7 +122,7 @@ def eval_epoch(model, validation_data, device):
     accuracy = n_word_correct/n_word_total
     return loss_per_word, accuracy
 
-def train(model, training_data, validation_data, optimizer, device, opt):
+def train(model, train_dataloader, valid_dataloader, optimizer, device, opt):
     ''' Start training '''
 
     log_train_file = None
@@ -202,14 +144,14 @@ def train(model, training_data, validation_data, optimizer, device, opt):
         print('[ Epoch', epoch_i, ']')
         start = time.time()
         train_loss, train_accu = train_epoch(
-            model, training_data, optimizer, device, smoothing=opt.label_smoothing)
+            model, train_dataloader, optimizer, device, smoothing=opt.label_smoothing)
         print('  - (Training)   ppl: {ppl: 8.5f}, accuracy: {accu:3.3f} %, '\
               'elapse: {elapse:3.3f} min'.format(
                   ppl=math.exp(min(train_loss, 100)), accu=100*train_accu,
                   elapse=(time.time()-start)/60))
 
         start = time.time()
-        valid_loss, valid_accu = eval_epoch(model, validation_data, device)
+        valid_loss, valid_accu = eval_epoch(model, valid_dataloader, device)
         print('  - (Validation) ppl: {ppl: 8.5f}, accuracy: {accu:3.3f} %, '\
                 'elapse: {elapse:3.3f} min'.format(
                     ppl=math.exp(min(valid_loss, 100)), accu=100*valid_accu,
@@ -245,7 +187,7 @@ def train(model, training_data, validation_data, optimizer, device, opt):
 def main():
     ''' Main function '''
     parser = argparse.ArgumentParser()
-
+    ''' FOR DATASET '''
     parser.add_argument('--train_src', required=True)
     parser.add_argument('--valid_src', required=True)
     parser.add_argument('--max_word_seq_len', type=int, default=100)
@@ -255,8 +197,11 @@ def main():
     parser.add_argument('--epoch', type=int, default=5000)
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--num_worker', type=int, default=8)
+    
+    ''' FOR model '''
+    parser.add_argument('--net', type=str, default='transformer', help='transformer, encode_decoder')
 
-    # parser.add_argument('-d_word_vec', type=int, default=512)
+
     parser.add_argument('--d_model', type=int, default=512)
     parser.add_argument('--d_inner_hid', type=int, default=2048)
     parser.add_argument('--d_k', type=int, default=64)
@@ -265,6 +210,12 @@ def main():
     parser.add_argument('--n_head', type=int, default=8)
     parser.add_argument('--n_layers', type=int, default=6)
     parser.add_argument('--n_warmup_steps', type=int, default=4000)
+
+    parser.add_argument('--embedding_size', type=int, default=256)
+    parser.add_argument('--hidden_size', type=int, default=512)
+    parser.add_argument('--num_layer', type=int, default=1)
+    
+    
 
     parser.add_argument('--dropout', type=float, default=0.1)
     parser.add_argument('--embs_share_weight', action='store_true')
@@ -277,6 +228,8 @@ def main():
     parser.add_argument('--save_mode', type=str, choices=['all', 'best'], default='best')
 
     parser.add_argument('--no_cuda', action='store_true')
+
+    ''' FOR optimizer'''
     parser.add_argument('--label_smoothing', action='store_true')
 
     opt = parser.parse_args()
@@ -285,86 +238,41 @@ def main():
 
     opt.max_token_seq_len = opt.max_word_seq_len + 2
     #========= Loading Dataset =========#
-    training_data = torch.utils.data.DataLoader(
-        dataset.TranslationDataset(
-            dir_name=opt.train_src,
-            max_word_seq_len= opt.max_word_seq_len,
-            min_word_count=opt.min_word_count,
-            keep_case=opt.keep_case,
-            training=True,
-            src_word2idx=None,
-            tgt_word2idx=None
-            ),
-        num_workers=opt.num_worker,
-        batch_size=opt.batch_size,
-        collate_fn=paired_collate_fn,
-        shuffle=True)
-    validation_data = torch.utils.data.DataLoader(
-        dataset.TranslationDataset(
-            dir_name=opt.valid_src,
-            max_word_seq_len= opt.max_word_seq_len,
-            min_word_count=opt.min_word_count,
-            keep_case=opt.keep_case,
-            training=False,
-            src_word2idx=training_data.dataset.src_word2idx,
-            tgt_word2idx=training_data.dataset.tgt_word2idx
-            ),
-        num_workers=opt.num_worker,
-        batch_size=opt.batch_size,
-        collate_fn=paired_collate_fn,
-        shuffle=False)
+    train_dataset = dataset.TranslationDataset(dir_name=opt.train_src, max_word_seq_len= opt.max_word_seq_len, min_word_count=opt.min_word_count, keep_case=opt.keep_case, training=True, src_word2idx=None, tgt_word2idx=None)
+    train_dataloader = torch.utils.data.DataLoader(train_dataset, num_workers=opt.num_worker, batch_size=opt.batch_size, collate_fn=dataset.alignCollate(opt), shuffle=True)
+
+    valid_dataset = dataset.TranslationDataset(dir_name=opt.valid_src, max_word_seq_len= opt.max_word_seq_len, min_word_count=opt.min_word_count, keep_case=opt.keep_case, training=False, src_word2idx=train_dataloader.dataset.src_word2idx, tgt_word2idx=train_dataloader.dataset.tgt_word2idx)
+    valid_dataloader = torch.utils.data.DataLoader(valid_dataset, num_workers=opt.num_worker, batch_size=opt.batch_size, collate_fn=dataset.alignCollate(opt), shuffle=False)
+    
     data = {
         'dict': {
-            'src': training_data.dataset.src_word2idx,
-            'tgt': training_data.dataset.tgt_word2idx}
+            'src': train_dataloader.dataset.src_word2idx,
+            'tgt': train_dataloader.dataset.tgt_word2idx}
         }
     print('[Info] Dumping the processed data to pickle file', opt.save_data)
     torch.save(data, opt.save_data)
     print('[Info] Finish.')
     del data
-    opt.src_vocab_size = training_data.dataset.src_vocab_size
-    opt.tgt_vocab_size = training_data.dataset.tgt_vocab_size
+    opt.src_vocab_size = train_dataloader.dataset.src_vocab_size
+    opt.tgt_vocab_size = train_dataloader.dataset.tgt_vocab_size
 
     #========= Preparing Model =========#
     if opt.embs_share_weight:
-        assert training_data.dataset.src_word2idx == training_data.dataset.tgt_word2idx, \
+        assert train_dataloader.dataset.src_word2idx == train_dataloader.dataset.tgt_word2idx, \
             'The src/tgt word2idx table are different but asked to share word embedding.'
 
     print(opt)
 
     device = torch.device('cuda' if opt.cuda else 'cpu')
-    if(constants.name_model =='transformer'):
-        model = Transformer(
-            opt.src_vocab_size,
-            opt.tgt_vocab_size,
-            opt.max_token_seq_len,
-            tgt_emb_prj_weight_sharing=opt.proj_share_weight,
-            emb_src_tgt_weight_sharing=opt.embs_share_weight,
-            d_k=opt.d_k,
-            d_v=opt.d_v,
-            d_model=opt.d_model,
-            d_word_vec=opt.d_word_vec,
-            d_inner=opt.d_inner_hid,
-            n_layers=opt.n_layers,
-            n_head=opt.n_head,
-            dropout=opt.dropout).to(device)
-
-    else:
-        model = make_model(opt.src_vocab_size,
-        opt.tgt_vocab_size,
-        device=device,
-        emb_size=opt.d_model,
-        hidden_size=opt.d_inner_hid,
-        num_layers=opt.n_layers,
-        dropout=opt.dropout,
-        num_classes=opt.tgt_vocab_size)
+    
+    model = Seq2seq(opt).to(device)
     optimizer = ScheduledOptim(
         optim.Adam(
             filter(lambda x: x.requires_grad, model.parameters()),
             betas=(0.9, 0.98), eps=1e-09),
         opt.d_model, opt.n_warmup_steps)
 
-    train(model, training_data, validation_data, optimizer, device ,opt)
+    train(model, train_dataloader, valid_dataloader, optimizer, device ,opt)
 
 
 
