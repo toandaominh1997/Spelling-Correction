@@ -12,16 +12,17 @@ import torch
 import torch.nn.functional as F
 import torch.optim as optim
 import torch.utils.data
-import transformer.Constants as Constants
-from transformer.Models import Transformer
-from transformer.Optim import ScheduledOptim
-import transformer.Constants as Constants
+import modules.Constants as Constants
+from modules.Models import Transformer
+from modules.Optim import ScheduledOptim
+import modules.Constants as Constants
 from glob import glob
 from datasets import dataset
-import constants
-from models.encoder_decoder import make_model
 import time 
+import datetime
 from models.model import Seq2seq
+
+from util.util import get_gpu
 
 def cal_performance(pred, gold, smoothing=False):
     ''' Apply label smoothing if needed '''
@@ -99,11 +100,8 @@ def eval_epoch(model, valid_dataloader, device):
     total_loss = 0
     n_word_total = 0
     n_word_correct = 0
-    start = time.time()
     with torch.no_grad():
-        for batch in tqdm(
-                valid_dataloader, mininterval=2,
-                desc='  - (Validation) ', leave=False):
+        for batch in tqdm(valid_dataloader, mininterval=2, desc='  - (Validation) ', leave=False):
 
             # prepare data
             src_seq, src_pos, tgt_seq, tgt_pos = map(lambda x: x.to(device), batch)
@@ -142,15 +140,15 @@ def train(model, train_dataloader, valid_dataloader, optimizer, device, opt):
     valid_accus = []
     for epoch_i in range(opt.epoch):
         print('[ Epoch', epoch_i, ']')
+
         start = time.time()
-        train_loss, train_accu = train_epoch(
-            model, train_dataloader, optimizer, device, smoothing=opt.label_smoothing)
+        train_loss, train_accu = train_epoch(model, train_dataloader, optimizer, device, smoothing=opt.label_smoothing)
+        
         print('  - (Training)   ppl: {ppl: 8.5f}, accuracy: {accu:3.3f} %, '\
               'elapse: {elapse:3.3f} min'.format(
                   ppl=math.exp(min(train_loss, 100)), accu=100*train_accu,
                   elapse=(time.time()-start)/60))
 
-        start = time.time()
         valid_loss, valid_accu = eval_epoch(model, valid_dataloader, device)
         print('  - (Validation) ppl: {ppl: 8.5f}, accuracy: {accu:3.3f} %, '\
                 'elapse: {elapse:3.3f} min'.format(
@@ -167,10 +165,10 @@ def train(model, train_dataloader, valid_dataloader, optimizer, device, opt):
 
         if opt.save_model:
             if opt.save_mode == 'all':
-                model_name = opt.save_model + '_accu_{accu:3.3f}.chkpt'.format(accu=100*valid_accu)
+                model_name = os.path.join(opt.save_model, 'model_{accu:3.3f}.pt'.format(accu=100*valid_accu))
                 torch.save(checkpoint, model_name)
             elif opt.save_mode == 'best':
-                model_name = opt.save_model + '.chkpt'
+                model_name = os.path.join(opt.save_model, 'model_best.pth')
                 if valid_accu >= max(valid_accus):
                     torch.save(checkpoint, model_name)
                     print('    - [Info] The checkpoint file has been updated.')
@@ -221,19 +219,22 @@ def main():
     parser.add_argument('--embs_share_weight', action='store_true')
     parser.add_argument('--proj_share_weight', action='store_true')
 
-    parser.add_argument('--name_model', default=None, help='Path to model file')
     parser.add_argument('--log', default=None)
-    parser.add_argument('--save_model', default=None)
-    parser.add_argument('--save_data', default='./data/word2idx.pth')
+    parser.add_argument('--save_model', default='saved')
     parser.add_argument('--save_mode', type=str, choices=['all', 'best'], default='best')
 
-    parser.add_argument('--no_cuda', action='store_true')
+    parser.add_argument('--cuda', action='store_true', default=True)
 
     ''' FOR optimizer'''
     parser.add_argument('--label_smoothing', action='store_true')
-
     opt = parser.parse_args()
-    opt.cuda = not opt.no_cuda
+    start_time = datetime.datetime.now().strftime('%m-%d_%H%M')
+    if not os.path.exists(os.path.join(opt.save_model, start_time)):
+        os.makedirs(os.path.join(opt.save_model, start_time))
+        opt.save_model = os.path.join(opt.save_model, start_time)
+
+    if(torch.cuda.is_available() and opt.cuda):
+        torch.cuda.set_device(get_gpu())
     opt.d_word_vec = opt.d_model
 
     opt.max_token_seq_len = opt.max_word_seq_len + 2
@@ -250,7 +251,7 @@ def main():
             'tgt': train_dataloader.dataset.tgt_word2idx}
         }
     print('[Info] Dumping the processed data to pickle file', opt.save_data)
-    torch.save(data, opt.save_data)
+    torch.save(data, os.path.join(opt.save_model, 'dict.pth'))
     print('[Info] Finish.')
     del data
     opt.src_vocab_size = train_dataloader.dataset.src_vocab_size
@@ -264,7 +265,7 @@ def main():
     print(opt)
 
     device = torch.device('cuda' if opt.cuda else 'cpu')
-    
+
     model = Seq2seq(opt).to(device)
     optimizer = ScheduledOptim(
         optim.Adam(

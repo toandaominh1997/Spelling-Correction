@@ -1,11 +1,10 @@
 from torch.utils.data import Dataset
-import transformer.Constants as Constants
 from glob import glob
 import os
 import numpy as np 
 import torch
 import torch.utils.data
-from transformer import Constants
+from modules import Constants
 
 class TranslationDataset(Dataset):
     def __init__(self, dir_name, max_word_seq_len=100, min_word_count=5, keep_case=False, training=False, src_word2idx=None, tgt_word2idx=None):

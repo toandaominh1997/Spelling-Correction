@@ -2,5 +2,5 @@ data
 __pycache__/
 kaka.chkpt
 trained.chkpt
-.vscode
+.vscode/
 
