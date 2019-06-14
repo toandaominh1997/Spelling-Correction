@@ -71,7 +71,7 @@ def main():
     #     batch_size=opt.batch_size,
     #     collate_fn=collate_fn,
     #     shuffle=False)
-    test_dataset = dataset.TranslationDataset(dir_name=opt.src, max_word_seq_len= opt.max_word_seq_len, min_word_count=opt.min_word_count, keep_case=opt.keep_case, training=False, src_word2idx=src_word2idx, tgt_word2idx=tgt_word2idx)
+    test_dataset = dataset.TranslationDataset(dir_name=opt.src, max_word_seq_len= opt.max_word_seq_len, min_word_count=opt.min_word_count, keep_case=opt.keep_case, training=-1, src_word2idx=src_word2idx, tgt_word2idx=tgt_word2idx)
     test_loader = torch.utils.data.DataLoader(test_dataset, num_workers=opt.num_worker, batch_size=opt.batch_size, collate_fn=dataset.collate_fn, shuffle=False)
     opt.src_vocab_size = test_loader.dataset.src_vocab_size
     opt.tgt_vocab_size = test_loader.dataset.tgt_vocab_size

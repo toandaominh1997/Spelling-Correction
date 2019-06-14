@@ -30,7 +30,7 @@ class TranslationDataset(Dataset):
                     if(not keep_case):
                         sent = sent.lower()
                     sent = sent.replace('\n', '').replace('\t', '')
-                    if(training):
+                    if(training==-1 or training==1):
                         words = list(sent)
                         if(len(words) > max_sent_len):
                             trimmed_sent_count +=1
@@ -117,7 +117,7 @@ class TranslationDataset(Dataset):
     @property
     def n_insts(self):
         ''' Property for dataset size '''
-        if(self.training):
+        if(self.training>0):
             return len(self._src_insts)*2
         else:
             return len(self._src_insts)
