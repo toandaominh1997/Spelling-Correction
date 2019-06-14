@@ -197,7 +197,7 @@ def main():
     parser.add_argument('--num_worker', type=int, default=8)
     
     ''' FOR model '''
-    parser.add_argument('--net', type=str, default='transformer', help='transformer, encode_decoder')
+    parser.add_argument('--net', type=str, default='transformer', help='transformer, seq2seq')
 
 
     parser.add_argument('--d_model', type=int, default=512)
@@ -250,7 +250,7 @@ def main():
             'src': train_dataloader.dataset.src_word2idx,
             'tgt': train_dataloader.dataset.tgt_word2idx}
         }
-    print('[Info] Dumping the processed data to pickle file', opt.save_data)
+    print('[Info] Dumping the processed data to pickle file', opt.save_model)
     torch.save(data, os.path.join(opt.save_model, 'dict.pth'))
     print('[Info] Finish.')
     del data

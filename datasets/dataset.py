@@ -205,7 +205,7 @@ class TranslationDataset(Dataset):
     
     def __getitem__(self, index):
         if(index<len(self._src_insts)):
-            if(self._tgt_insts):
+            if(self._tgt_insts and self.training):
                 return self._src_insts[index], self._tgt_insts[index]
             return self._src_insts[index]
         else:
@@ -235,3 +235,20 @@ class alignCollate(object):
         batch_pos = torch.LongTensor(batch_pos)
         
         return batch_seq, batch_pos
+
+def collate_fn(insts):
+    ''' Pad the instance to the max seq length in batch '''
+    max_len = max(len(inst) for inst in insts)
+
+    batch_seq = np.array([
+        inst + [Constants.PAD] * (max_len - len(inst))
+        for inst in insts])
+
+    batch_pos = np.array([
+        [pos_i+1 if w_i != Constants.PAD else 0
+         for pos_i, w_i in enumerate(inst)] for inst in batch_seq]) 
+
+    batch_seq = torch.LongTensor(batch_seq)
+    batch_pos = torch.LongTensor(batch_pos)
+
+    return batch_seq, batch_pos

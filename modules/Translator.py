@@ -6,6 +6,7 @@ import torch.nn.functional as F
 
 from modules.Models import Transformer
 from modules.Beam import Beam
+from models.model import Seq2seq
 
 class Translator(object):
     ''' Load with trained model and handle the beam search '''
@@ -18,20 +19,7 @@ class Translator(object):
         model_opt = checkpoint['settings']
         self.model_opt = model_opt
 
-        model = Transformer(
-            model_opt.src_vocab_size,
-            model_opt.tgt_vocab_size,
-            model_opt.max_token_seq_len,
-            tgt_emb_prj_weight_sharing=model_opt.proj_share_weight,
-            emb_src_tgt_weight_sharing=model_opt.embs_share_weight,
-            d_k=model_opt.d_k,
-            d_v=model_opt.d_v,
-            d_model=model_opt.d_model,
-            d_word_vec=model_opt.d_word_vec,
-            d_inner=model_opt.d_inner_hid,
-            n_layers=model_opt.n_layers,
-            n_head=model_opt.n_head,
-            dropout=model_opt.dropout)
+        model = Seq2seq(self.model_opt)
 
         model.load_state_dict(checkpoint['model'])
         print('[Info] Trained model state loaded.')
@@ -93,9 +81,9 @@ class Translator(object):
                 return dec_partial_pos
 
             def predict_word(dec_seq, dec_pos, src_seq, enc_output, n_active_inst, n_bm):
-                dec_output, *_ = self.model.decoder(dec_seq, dec_pos, src_seq, enc_output)
+                dec_output, *_ = self.model.model.decoder(dec_seq, dec_pos, src_seq, enc_output)
                 dec_output = dec_output[:, -1, :]  # Pick the last step: (bh * bm) * d_h
-                word_prob = F.log_softmax(self.model.tgt_word_prj(dec_output), dim=1)
+                word_prob = F.log_softmax(self.model.model.tgt_word_prj(dec_output), dim=1)
                 word_prob = word_prob.view(n_active_inst, n_bm, -1)
 
                 return word_prob
@@ -134,7 +122,7 @@ class Translator(object):
         with torch.no_grad():
             #-- Encode
             src_seq, src_pos = src_seq.to(self.device), src_pos.to(self.device)
-            src_enc, *_ = self.model.encoder(src_seq, src_pos)
+            src_enc, *_ = self.model.model.encoder(src_seq, src_pos)
 
             #-- Repeat data for beam search
             n_bm = self.opt.beam_size
