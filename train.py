@@ -168,6 +168,7 @@ def train(model, train_dataloader, valid_dataloader, optimizer, device, opt):
                 model_name = os.path.join(opt.save_model, 'model_{accu:3.3f}.pt'.format(accu=100*valid_accu))
                 torch.save(checkpoint, model_name)
             elif opt.save_mode == 'best':
+
                 model_name = os.path.join(opt.save_model, 'model_best.pth')
                 if valid_accu >= max(valid_accus):
                     torch.save(checkpoint, model_name)
@@ -239,10 +240,10 @@ def main():
 
     opt.max_token_seq_len = opt.max_word_seq_len + 2
     #========= Loading Dataset =========#
-    train_dataset = dataset.TranslationDataset(dir_name=opt.train_src, max_word_seq_len= opt.max_word_seq_len, min_word_count=opt.min_word_count, keep_case=opt.keep_case, training=True, src_word2idx=None, tgt_word2idx=None)
+    train_dataset = dataset.TranslationDataset(dir_name=opt.train_src, max_word_seq_len= opt.max_word_seq_len, min_word_count=opt.min_word_count, keep_case=opt.keep_case, training=1, src_word2idx=None, tgt_word2idx=None)
     train_dataloader = torch.utils.data.DataLoader(train_dataset, num_workers=opt.num_worker, batch_size=opt.batch_size, collate_fn=dataset.alignCollate(opt), shuffle=True)
 
-    valid_dataset = dataset.TranslationDataset(dir_name=opt.valid_src, max_word_seq_len= opt.max_word_seq_len, min_word_count=opt.min_word_count, keep_case=opt.keep_case, training=False, src_word2idx=train_dataloader.dataset.src_word2idx, tgt_word2idx=train_dataloader.dataset.tgt_word2idx)
+    valid_dataset = dataset.TranslationDataset(dir_name=opt.valid_src, max_word_seq_len= opt.max_word_seq_len, min_word_count=opt.min_word_count, keep_case=opt.keep_case, training=0, src_word2idx=train_dataloader.dataset.src_word2idx, tgt_word2idx=train_dataloader.dataset.tgt_word2idx)
     valid_dataloader = torch.utils.data.DataLoader(valid_dataset, num_workers=opt.num_worker, batch_size=opt.batch_size, collate_fn=dataset.alignCollate(opt), shuffle=False)
     
     data = {

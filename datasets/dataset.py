@@ -205,7 +205,7 @@ class TranslationDataset(Dataset):
     
     def __getitem__(self, index):
         if(index<len(self._src_insts)):
-            if(self._tgt_insts and self.training):
+            if(self._tgt_insts and self.training>=0):
                 return self._src_insts[index], self._tgt_insts[index]
             return self._src_insts[index]
         else:
